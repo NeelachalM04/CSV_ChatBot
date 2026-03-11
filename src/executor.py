@@ -1,3 +1,5 @@
+# Executes the generated code safely
+
 def execute_query(code, df):
 
     try:

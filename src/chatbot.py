@@ -15,8 +15,19 @@ class CSVChatbot:
 
     def ask(self, question):
 
-        query = generate_query(question, list(self.df.columns))
-        # query = generate_query(question, list(self.df.columns))
+        columns = list(self.df.columns)
+
+        # extract unique textual values (ignore numerical columns)
+        categorical_values = {}
+
+        for col in self.df.columns:
+            if self.df[col].dtype == "object":
+                categorical_values[col] = list(self.df[col].dropna().unique())[:10]
+
+        query = generate_query(question, columns, categorical_values)
+
+        # clean markdown if present
+        query = query.replace("```python", "").replace("```", "").strip()
 
         print("\nGenerated Query:")
         print(query)

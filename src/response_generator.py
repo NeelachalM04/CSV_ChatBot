@@ -1,4 +1,4 @@
-# response generator
+# response generator - Converts query results into natural language answers using Azure OpenAI
 from src.azure_client import client
 from config import AZURE_OPENAI_DEPLOYMENT
 
@@ -31,7 +31,12 @@ Instructions:
 * Use the result exactly as provided.
 * Do not invent additional information.
 * Keep the answer concise and easy to understand.
-* If the result contains multiple rows, explain what it represents and include the rows.
+* If the result contains multiple rows:
+  - First state how many rows are in the result.
+  - Then in next line say "Showing the  few rows".
+  - Display the rows exactly as provided.
+* Do not summarize the rows.
+* Do not hide or remove the rows.
 
 Return only the final answer.
 
