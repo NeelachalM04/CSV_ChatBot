@@ -5,23 +5,29 @@ from config import AZURE_OPENAI_DEPLOYMENT
 def generate_query(question, columns):
 
     prompt = f"""
-You are a pandas expert.
+You are an expert data analyst who writes Python pandas code to answer questions about tabular datasets.
 
-The dataframe name is df.
+A dataframe named **df** contains the dataset.
 
-Columns:
+DATAFRAME COLUMNS:
 {columns}
 
-Generate ONLY valid pandas code.
+Your task is to translate the user's natural language question into valid pandas code that operates on df.
 
-Rules:
-- Do not include explanations
-- Do not include ```python
-- Only return executable pandas code
-- If asked for total rows use len(df)
+Important rules:
+- Carefully check whether the user's question refers to any column in the dataset.
+- If the requested concept or column is not present in the dataset, return exactly:
+   Requested information is not present in the dataset.
+- Do not infer new metrics or combine columns unless the question explicitly asks for it.
+- Use only the columns listed above.
+- Return only the pandas query.
+- Do NOT include markdown, backticks, or explanations.
+- Output must be a single executable Python expression.
+
 
 User Question:
 {question}
+
 """
 
     response = client.chat.completions.create(

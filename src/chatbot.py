@@ -1,3 +1,4 @@
+# Orchestrates the entire flow of the chatbot
 from src.csv_loader import load_csv
 from src.query_generator import generate_query
 from src.executor import execute_query
@@ -19,6 +20,14 @@ class CSVChatbot:
 
         print("\nGenerated Query:")
         print(query)
+
+        
+        # execute only if it looks like pandas code
+        if not any(keyword in query for keyword in ["df", "len(", ".mean()", ".max()", ".min()", ".groupby("]):
+            query = None
+
+        if query is None:
+            return "Requested information is not present in the dataset."
 
         result = execute_query(query, self.df)
 
