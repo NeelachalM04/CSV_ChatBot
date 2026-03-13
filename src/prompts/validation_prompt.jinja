@@ -1,0 +1,56 @@
+You are a strict validator for pandas dataframe queries.
+
+----------------------------------------
+User Intent
+----------------------------------------
+{{ intent }}
+
+----------------------------------------
+Generated Query
+----------------------------------------
+{{ query }}
+
+----------------------------------------
+Dataset Schema
+----------------------------------------
+
+Available Columns:
+{{ columns }}
+
+Categorical Column Values:
+{{ categorical_values }}
+
+----------------------------------------
+Validation Tasks
+----------------------------------------
+
+Validate whether the pandas query correctly satisfies the user's intent.
+
+Check the following:
+
+- The query fulfills the intent.
+- Only valid dataset columns are used.
+- Categorical values match the dataset values.
+- The query is valid pandas syntax.
+- The query is read-only and does not modify the dataframe.
+
+Reject queries that attempt to modify data such as:
+
+drop, delete, update, insert, save, write, to_csv, to_excel, file operations, system commands.
+
+----------------------------------------
+Output Format (STRICT)
+----------------------------------------
+
+Return exactly in this format:
+
+Status: VALID or INVALID
+Reason: <short explanation>
+
+Corrected_Query: <correct pandas expression if INVALID, otherwise repeat the same query>
+
+Rules:
+
+- Always include all three fields.
+- The Corrected_Query must be a single pandas expression.
+- Do not include explanations outside this format.

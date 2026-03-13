@@ -1,49 +1,150 @@
-# Orchestrates the entire flow of the chatbot
-from src.csv_loader import load_csv
-from src.query_generator import generate_query
-from src.executor import execute_query
-from src.summarizer import summarize_result
-from src.response_generator import generate_response
-from config import DATA_PATH
+import pandas as pd
+import re
+import difflib
+from src.utils.csv_loader import load_csv
+from src.agents.query_agent import extract_intent_and_query   # ← updated import
+from src.agents.validation_agent import validate_query
+from src.utils.helpers import execute_query, summarize_result, normalize_result
+from src.agents.response_agent import generate_response
+from src.utils.dataframe_analyzer import analyze_dataframe
 
 
 class CSVChatbot:
 
     def __init__(self):
-
-        self.df = load_csv(DATA_PATH)
+        self.df = load_csv()
 
     def ask(self, question):
 
-        columns = list(self.df.columns)
+        schema = analyze_dataframe(self.df)
 
-        # extract unique textual values (ignore numerical columns)
-        categorical_values = {}
+        columns = (
+            list(schema["categorical_columns"].keys())
+            + schema["numerical_columns"]
+            + schema["datetime_columns"]
+        )
 
-        for col in self.df.columns:
-            if self.df[col].dtype == "object":
-                categorical_values[col] = list(self.df[col].dropna().unique())[:10]
+        categorical_values = schema["categorical_columns"]
 
-        query = generate_query(question, columns, categorical_values)
+        # Step 1+2 → extract intent AND generate query (merged)
+        intent, query_initial = extract_intent_and_query(question, columns, categorical_values)
 
-        # clean markdown if present
-        query = query.replace("```python", "").replace("```", "").strip()
+        print("\nExtracted Intent:")
+        print(intent)
 
-        print("\nGenerated Query:")
+        retries = 0
+        max_retries = 3
+        query = query_initial.replace("```python", "").replace("```", "").strip()
+
+        while retries < max_retries:
+
+            if "|" in query or "\n|" in query:
+                _, query = extract_intent_and_query(question, columns, categorical_values)
+                query = query.replace("```python", "").replace("```", "").strip()
+                retries += 1
+                continue
+
+            # Step 3 → validate query
+            validation = validate_query(intent, query, columns, categorical_values)
+
+            if "Status: VALID" in validation:
+
+                unsafe_keywords = [
+                    "drop(", "to_csv", "to_excel", "update(",
+                    "delete", "insert", "write", "save",
+                    "os.", "sys.", "subprocess"
+                ]
+
+                if any(word in query.lower() for word in unsafe_keywords):
+                    retries += 1
+                    continue
+
+                if not query.strip().startswith("df"):
+                    retries += 1
+                    continue
+
+                if re.search(r"^\s*\w+\s*=", query):
+                    retries += 1
+                    continue
+
+                break
+
+            if "Corrected_Query:" in validation:
+                query = validation.split("Corrected_Query:")[-1].strip()
+
+            retries += 1
+
+        # retries exhausted
+        if retries == max_retries:
+            available_cols = ", ".join(columns)
+            answer = (
+                "Your request refers to a column that does not exist in the dataset. "
+                f"Available columns are: {available_cols}. "
+                "Please ask using one of these fields."
+            )
+            return answer, None
+
+        print("\nFinal Generated Query:")
         print(query)
 
-        
-        # execute only if it looks like pandas code
-        if not any(keyword in query for keyword in ["df", "len(", ".mean()", ".max()", ".min()", ".groupby("]):
-            query = None
+        # Step 4 → execute
+        result, error = execute_query(query, self.df)
 
-        if query is None:
-            return "Requested information is not present in the dataset."
+        if result is not None:
+            result = normalize_result(result)
 
-        result = execute_query(query, self.df)
+        # Step 5 → handle errors
+        if error:
+            error_lower = str(error).lower()
 
+            if any(col_word in error_lower for col_word in ["keyerror", "not in index", "not defined"]):
+                available_cols = ", ".join(columns)
+                answer = (
+                    "The dataset does not contain the column referenced in your question. "
+                    f"Available columns in this dataset are: {available_cols}."
+                )
+                return answer, None
+
+            question_lower = question.lower()
+            for col, values in categorical_values.items():
+                if col in question_lower:
+                    matches = difflib.get_close_matches(question_lower, values, n=3)
+                    if matches:
+                        suggestions = "\n".join([f"→ {v}" for v in values])
+                        answer = (
+                            f"The value mentioned in your question does not match any "
+                            f"known category in '{col}'.\n\n"
+                            f"Did you mean one of these?\n{suggestions}"
+                        )
+                        return answer, None
+
+            answer = generate_response(
+                question,
+                f"The query could not be executed due to this error: {error}"
+            )
+            return answer, None
+
+        # Step 6 → summarize
         summarized = summarize_result(result)
 
-        answer = generate_response(question, summarized)
+        # Step 7 → build response payload
+        if isinstance(summarized, dict) and "sample" in summarized:
+            response_payload = {
+                "result": summarized["sample"],
+                "total_rows": summarized["rows"],
+                "display_rows": len(summarized["sample"])
+            }
+        else:
+            response_payload = {
+                "result": summarized,
+                "total_rows": None,
+                "display_rows": None
+            }
 
-        return answer
+        # Step 8 → generate natural language answer
+        answer = generate_response(question, response_payload)
+
+        if isinstance(summarized, dict) and "sample" in summarized:
+            return answer, pd.DataFrame(summarized["sample"])
+
+        return answer, result

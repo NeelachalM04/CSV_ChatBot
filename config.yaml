@@ -1,0 +1,28 @@
+azure:
+  endpoint: https://openai-idc-training.openai.azure.com/
+  api_version: 2025-01-01-preview
+  deployment: gpt-4o
+
+limits:
+  max_sample_rows: 10
+
+logs:
+  log_folder: logs
+  file_name: chatbot_#DATE#.csv
+
+dataframe_analysis:
+
+  # max unique values allowed for categorical columns
+  unique_threshold: 20
+
+  # percentage of unique values allowed for categorical columns
+  ratio_threshold: 0.05
+
+  # if unique ratio is greater than this → treat as ID/high-cardinality column
+  id_threshold: 0.9
+
+  # maximum categorical values to send to LLM
+  max_categorical_values: 20
+
+dataset:
+  data_path: data/StudentsPerformance.csv

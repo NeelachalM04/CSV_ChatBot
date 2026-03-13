@@ -1,0 +1,890 @@
+﻿===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\config.yaml
+===============================
+
+azure:
+  endpoint: https://openai-idc-training.openai.azure.com/
+  api_version: 2025-01-01-preview
+  deployment: gpt-4o
+
+limits:
+  max_sample_rows: 10
+
+logs:
+  log_folder: logs
+  file_name: chatbot_#DATE#.csv
+
+dataframe_analysis:
+
+  # max unique values allowed for categorical columns
+  unique_threshold: 20
+
+  # percentage of unique values allowed for categorical columns
+  ratio_threshold: 0.05
+
+  # if unique ratio is greater than this → treat as ID/high-cardinality column
+  id_threshold: 0.9
+
+  # maximum categorical values to send to LLM
+  max_categorical_values: 20
+
+dataset:
+  data_path: data/StudentsPerformance.csv
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\main.py
+===============================
+
+from src.chatbot import CSVChatbot
+import pandas as pd
+from tabulate import tabulate
+
+bot = CSVChatbot()
+
+print("CSV Chatbot Ready (type exit to stop)")
+
+while True:
+
+    question = input("\nUser: ")
+
+    if question.lower() == "exit":
+        break
+
+    answer, result = bot.ask(question)
+
+    # Print conversational answer first
+    print("\nBot:", answer)
+    
+
+
+    if result is not None:
+        print("\nResult:")
+
+        if isinstance(result, pd.Series):
+            result = result.to_frame().T
+
+        if isinstance(result, (pd.DataFrame, pd.Series)):
+            print(result.to_string())
+        else:
+            print(result)
+#     # Display rows neatly
+#     if isinstance(result, pd.DataFrame):
+#         print("\nShowing few rows:")
+#         print(
+#             tabulate(
+#                 result.head(5),
+#                 headers="keys",
+#                 tablefmt="psql",
+#                 showindex=False
+#             )
+#         )
+
+#     elif isinstance(result, pd.Series):
+#         print("\nShowing few rows:")
+#         print(
+#             tabulate(
+#         result.head(5),
+#         headers="keys",
+#         tablefmt="simple",
+#         showindex=False
+#         )
+# )
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\azure_client.py
+===============================
+
+import os
+import yaml
+from openai import AzureOpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Load config.yaml
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    azure_endpoint=config["azure"]["endpoint"],
+    api_version=config["azure"]["api_version"]
+)
+
+deployment_name = config["azure"]["deployment"]
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\chatbot.py
+===============================
+
+import pandas as pd
+import re
+import difflib
+from src.utils.csv_loader import load_csv
+from src.agents.query_agent import extract_intent_and_query   # ← updated import
+from src.agents.validation_agent import validate_query
+from src.utils.helpers import execute_query, summarize_result, normalize_result
+from src.agents.response_agent import generate_response
+from src.utils.dataframe_analyzer import analyze_dataframe
+
+
+class CSVChatbot:
+
+    def __init__(self):
+        self.df = load_csv()
+
+    def ask(self, question):
+
+        schema = analyze_dataframe(self.df)
+
+        columns = (
+            list(schema["categorical_columns"].keys())
+            + schema["numerical_columns"]
+            + schema["datetime_columns"]
+        )
+
+        categorical_values = schema["categorical_columns"]
+
+        # Step 1+2 → extract intent AND generate query (merged)
+        intent, query_initial = extract_intent_and_query(question, columns, categorical_values)
+
+        print("\nExtracted Intent:")
+        print(intent)
+
+        retries = 0
+        max_retries = 3
+        query = query_initial.replace("```python", "").replace("```", "").strip()
+
+        while retries < max_retries:
+
+            if "|" in query or "\n|" in query:
+                _, query = extract_intent_and_query(question, columns, categorical_values)
+                query = query.replace("```python", "").replace("```", "").strip()
+                retries += 1
+                continue
+
+            # Step 3 → validate query
+            validation = validate_query(intent, query, columns, categorical_values)
+
+            if "Status: VALID" in validation:
+
+                unsafe_keywords = [
+                    "drop(", "to_csv", "to_excel", "update(",
+                    "delete", "insert", "write", "save",
+                    "os.", "sys.", "subprocess"
+                ]
+
+                if any(word in query.lower() for word in unsafe_keywords):
+                    retries += 1
+                    continue
+
+                if not query.strip().startswith("df"):
+                    retries += 1
+                    continue
+
+                if re.search(r"^\s*\w+\s*=", query):
+                    retries += 1
+                    continue
+
+                break
+
+            if "Corrected_Query:" in validation:
+                query = validation.split("Corrected_Query:")[-1].strip()
+
+            retries += 1
+
+        # retries exhausted
+        if retries == max_retries:
+            available_cols = ", ".join(columns)
+            answer = (
+                "Your request refers to a column that does not exist in the dataset. "
+                f"Available columns are: {available_cols}. "
+                "Please ask using one of these fields."
+            )
+            return answer, None
+
+        print("\nFinal Generated Query:")
+        print(query)
+
+        # Step 4 → execute
+        result, error = execute_query(query, self.df)
+
+        if result is not None:
+            result = normalize_result(result)
+
+        # Step 5 → handle errors
+        if error:
+            error_lower = str(error).lower()
+
+            if any(col_word in error_lower for col_word in ["keyerror", "not in index", "not defined"]):
+                available_cols = ", ".join(columns)
+                answer = (
+                    "The dataset does not contain the column referenced in your question. "
+                    f"Available columns in this dataset are: {available_cols}."
+                )
+                return answer, None
+
+            question_lower = question.lower()
+            for col, values in categorical_values.items():
+                if col in question_lower:
+                    matches = difflib.get_close_matches(question_lower, values, n=3)
+                    if matches:
+                        suggestions = "\n".join([f"→ {v}" for v in values])
+                        answer = (
+                            f"The value mentioned in your question does not match any "
+                            f"known category in '{col}'.\n\n"
+                            f"Did you mean one of these?\n{suggestions}"
+                        )
+                        return answer, None
+
+            answer = generate_response(
+                question,
+                f"The query could not be executed due to this error: {error}"
+            )
+            return answer, None
+
+        # Step 6 → summarize
+        summarized = summarize_result(result)
+
+        # Step 7 → build response payload
+        if isinstance(summarized, dict) and "sample" in summarized:
+            response_payload = {
+                "result": summarized["sample"],
+                "total_rows": summarized["rows"],
+                "display_rows": len(summarized["sample"])
+            }
+        else:
+            response_payload = {
+                "result": summarized,
+                "total_rows": None,
+                "display_rows": None
+            }
+
+        # Step 8 → generate natural language answer
+        answer = generate_response(question, response_payload)
+
+        if isinstance(summarized, dict) and "sample" in summarized:
+            return answer, pd.DataFrame(summarized["sample"])
+
+        return answer, result
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\agents\query_agent.py
+===============================
+
+from src.azure_client import client, deployment_name
+from src.utils.prompt_loader import get_query_prompt,get_intent_prompt
+
+
+def extract_intent_and_query(question, columns, categorical_values):
+    """
+    Step 1 → Extract intent from user question
+    Step 2 → Generate pandas query from intent
+    Both handled here since prompts are in query_prompt.jinja
+    """
+
+    # ---------- STEP 1: INTENT EXTRACTION ----------
+    intent_prompt = get_intent_prompt(
+        question,
+        columns,
+        categorical_values
+    )
+
+    intent_response = client.chat.completions.create(
+        model=deployment_name,
+        messages=[
+            {"role": "system", "content": "You extract structured query intent from user questions."},
+            {"role": "user", "content": intent_prompt}
+        ]
+    )
+
+    intent = intent_response.choices[0].message.content.strip()
+
+    # ---------- STEP 2: QUERY GENERATION ----------
+    query_prompt = get_query_prompt(
+        columns,
+        categorical_values,
+        intent
+    )
+
+    query_response = client.chat.completions.create(
+        model=deployment_name,
+        messages=[
+            {"role": "system", "content": "You generate pandas queries based on structured intent."},
+            {"role": "user", "content": query_prompt}
+        ]
+    )
+
+    query = query_response.choices[0].message.content.strip()
+
+    return intent, query
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\agents\response_agent.py
+===============================
+
+from src.azure_client import client
+from src.utils.prompt_loader import get_response_prompt
+from src.azure_client import client, deployment_name
+
+
+def generate_response(question, result_text):
+
+    prompt = get_response_prompt(question, result_text)
+
+    response = client.chat.completions.create(
+        model=deployment_name,
+        messages=[
+            {"role": "system", "content": "You explain query results clearly."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response.choices[0].message.content.strip()
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\agents\validation_agent.py
+===============================
+
+from src.azure_client import client, deployment_name
+from src.utils.prompt_loader import get_validation_prompt
+
+
+def validate_query(intent, query, columns, categorical_values):
+
+    prompt = get_validation_prompt(
+        intent,
+        query,
+        columns,
+        categorical_values
+    )
+
+    response = client.chat.completions.create(
+        model=deployment_name,
+        messages=[
+            {"role": "system", "content": "You validate pandas dataframe queries strictly."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response.choices[0].message.content.strip()
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\agents\__init__.py
+===============================
+
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\prompts\query_prompt.jinja
+===============================
+
+You are an expert data analyst who writes Python pandas expressions to answer questions about tabular datasets.
+
+A pandas dataframe named `df` contains the dataset.
+
+----------------------------------------
+DATAFRAME SCHEMA
+----------------------------------------
+
+Available Columns:
+{{ columns }}
+
+Categorical Column Values:
+{{ categorical_values }}
+
+----------------------------------------
+STRUCTURED USER INTENT
+----------------------------------------
+
+{{ intent }}
+
+The intent describes the user's request in terms of:
+
+- Intent
+- Columns involved
+- Filters
+- Aggregation
+- Sorting
+- Expected Output
+
+Carefully interpret this structured intent and convert it into a pandas expression.
+
+----------------------------------------
+TASK
+----------------------------------------
+
+Generate a valid pandas expression that fulfills the user's intent using the dataframe `df`.
+
+While generating the query consider:
+
+• Which columns are referenced  
+• Whether filters should be applied  
+• Whether aggregation is required (mean, sum, count, min, max)  
+• Whether grouping or sorting is needed  
+• Whether the user requested top or bottom results  
+• The structure of the expected output  
+
+Use the pandas operation that best matches the intent.
+
+----------------------------------------
+IMPORTANT CONSTRAINTS
+----------------------------------------
+
+- Use **only the column names provided in the dataframe schema**.
+- If filtering categorical columns, use **only values from the provided categorical list**.
+- The dataframe variable name is always **df**.
+- Return **only one pandas expression** that can be executed using `eval()`.
+- Do **not create new variables**.
+- Do **not overwrite the dataframe**.
+- Do **not generate multiple lines of code**.
+- Do **not include explanations, markdown, or text**.
+
+----------------------------------------
+CODE SAFETY
+----------------------------------------
+
+The generated expression must be read-only.
+
+Do NOT generate operations that modify data or files such as:
+
+drop, delete, update, insert, save, write, to_csv, to_excel, file operations, system commands.
+
+----------------------------------------
+INVALID REQUESTS
+----------------------------------------
+
+If the intent cannot be satisfied using the dataset schema return exactly:
+
+Requested information is not present in the dataset.
+
+----------------------------------------
+OUTPUT
+----------------------------------------
+
+Return only the pandas expression.
+
+Do NOT include ```python or ``` in the output.
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\prompts\response_prompt.jinja
+===============================
+
+You are a helpful assistant that explains the result of a dataframe query to the user.
+
+----------------------------------------
+User Question
+----------------------------------------
+{{ question }}
+
+----------------------------------------
+Query Result
+----------------------------------------
+{{ result.result }}
+
+----------------------------------------
+Row Information
+----------------------------------------
+Total Rows: {{ result.total_rows }}
+Displayed Rows: {{ result.display_rows }}
+
+----------------------------------------
+Instructions
+----------------------------------------
+
+Provide a clear and natural conversational answer to the user's question based only on the provided result.
+
+Guidelines:
+
+- Focus on the answer, not how the dataframe query was executed.
+- Use the information exactly as provided in the result.
+- Do NOT invent column names, values, or additional data.
+- Do NOT generate tables or structured outputs.
+- Do NOT display raw result objects or sample rows.
+- Keep the explanation concise and easy to understand.
+
+Row handling:
+
+- If both **Total Rows** and **Displayed Rows** are present, explain that the dataset contains the total number of matching rows and that only a subset is displayed.
+- Example:  
+  "There are 500 rows that match your request, but only the first 10 rows are shown."
+
+- If only a single numeric value is returned (such as an average, count, minimum, or maximum), clearly state that value in a sentence answering the user's question.
+
+- If no records are found, clearly state that no matching rows exist for the request.
+
+Your response should directly answer the user in plain language.
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\prompts\validation_prompt.jinja
+===============================
+
+You are a strict validator for pandas dataframe queries.
+
+----------------------------------------
+User Intent
+----------------------------------------
+{{ intent }}
+
+----------------------------------------
+Generated Query
+----------------------------------------
+{{ query }}
+
+----------------------------------------
+Dataset Schema
+----------------------------------------
+
+Available Columns:
+{{ columns }}
+
+Categorical Column Values:
+{{ categorical_values }}
+
+----------------------------------------
+Validation Tasks
+----------------------------------------
+
+Validate whether the pandas query correctly satisfies the user's intent.
+
+Check the following:
+
+- The query fulfills the intent.
+- Only valid dataset columns are used.
+- Categorical values match the dataset values.
+- The query is valid pandas syntax.
+- The query is read-only and does not modify the dataframe.
+
+Reject queries that attempt to modify data such as:
+
+drop, delete, update, insert, save, write, to_csv, to_excel, file operations, system commands.
+
+----------------------------------------
+Output Format (STRICT)
+----------------------------------------
+
+Return exactly in this format:
+
+Status: VALID or INVALID
+Reason: <short explanation>
+
+Corrected_Query: <correct pandas expression if INVALID, otherwise repeat the same query>
+
+Rules:
+
+- Always include all three fields.
+- The Corrected_Query must be a single pandas expression.
+- Do not include explanations outside this format.
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\utils\csv_loader.py
+===============================
+
+import yaml
+import pandas as pd
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+DATA_PATH = config["dataset"]["data_path"]
+
+
+def load_csv():
+
+    df = pd.read_csv(DATA_PATH)
+
+    # Normalize column names
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(r"[^\w\s]", "", regex=True)   # remove special chars
+        .str.replace(" ", "_")                     # spaces → underscore
+    )
+
+    # Optional short aliases for cleaner queries
+    df.rename(columns={
+        "parental_level_of_education": "parent_edu",
+        "test_preparation_course": "prep_course"
+    }, inplace=True)
+
+    return df
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\utils\dataframe_analyzer.py
+===============================
+
+import pandas as pd
+import yaml
+from pathlib import Path
+
+# load config.yaml
+CONFIG_PATH = Path("config.yaml")
+
+with open(CONFIG_PATH, "r") as f:
+    config = yaml.safe_load(f)
+
+analysis_config = config["dataframe_analysis"]
+
+UNIQUE_THRESHOLD = analysis_config["unique_threshold"]
+RATIO_THRESHOLD = analysis_config["ratio_threshold"]
+ID_THRESHOLD = analysis_config["id_threshold"]
+MAX_CATEGORICAL_VALUES = analysis_config["max_categorical_values"]
+
+
+def analyze_dataframe(df):
+    """
+    Deterministically analyze dataframe schema.
+
+    Returns structured schema for LLM usage.
+    """
+
+    schema = {
+        "categorical_columns": {},
+        "numerical_columns": [],
+        "datetime_columns": [],
+        "other_columns": []
+    }
+
+    total_rows = len(df)
+
+    for col in df.columns:
+
+        series = df[col]
+        dtype = series.dtype
+
+        unique_values = series.dropna().unique()
+        unique_count = len(unique_values)
+
+        unique_ratio = unique_count / total_rows if total_rows > 0 else 0
+
+        # datetime detection
+        if pd.api.types.is_datetime64_any_dtype(dtype):
+
+            schema["datetime_columns"].append(col)
+
+        # ID / high cardinality detection
+        elif unique_ratio >= ID_THRESHOLD:
+
+            schema["other_columns"].append(col)
+
+        # categorical detection
+        elif (
+            dtype == "object"
+            or dtype.name == "category"
+            or dtype == "bool"
+            or unique_count <= UNIQUE_THRESHOLD
+            or unique_ratio <= RATIO_THRESHOLD
+        ):
+
+            schema["categorical_columns"][col] = [
+                str(v) for v in unique_values[:MAX_CATEGORICAL_VALUES]
+            ]
+
+        # numerical columns
+        elif pd.api.types.is_numeric_dtype(dtype):
+
+            schema["numerical_columns"].append(col)
+
+        # fallback
+        else:
+
+            schema["other_columns"].append(col)
+
+    return schema
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\utils\helpers.py
+===============================
+
+# from src.utils.config_loader import load_config
+
+# config = load_config()
+# MAX_SAMPLE_ROWS = config["limits"]["max_sample_rows"]
+
+
+# def execute_query(code, df):
+
+#     try:
+#         result = eval(code, {"df": df})
+#         return result, None
+
+#     except Exception as e:
+#         return None, str(e)
+
+
+# def summarize_result(result):
+
+#     # If result is a dataframe
+#     if hasattr(result, "shape"):
+
+#         row_count = len(result)
+
+#         if row_count > MAX_SAMPLE_ROWS:
+
+#             sample = result.head(MAX_SAMPLE_ROWS)
+
+#             return {
+#                 "rows": row_count,
+#                 "sample": sample.to_dict(orient="records")      # convert sample() to list of dicts for better readability
+#             }
+
+#         # small dataframe → return full data
+#         return result.to_dict(orient="records")
+
+#     return result
+
+
+
+import yaml
+
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+MAX_SAMPLE_ROWS = config["limits"]["max_sample_rows"]
+
+
+def execute_query(code, df):
+
+    try:
+        result = eval(code, {"df": df})
+        return result, None
+
+    except Exception as e:
+        return None, str(e)
+
+
+def summarize_result(result):
+
+    # ---- CASE 1: DataFrame ----
+    if hasattr(result, "shape") and hasattr(result, "columns"):
+
+        row_count = len(result)
+
+        if row_count > MAX_SAMPLE_ROWS:
+
+            sample = result.head(MAX_SAMPLE_ROWS)
+
+            return {
+                "rows": row_count,
+                "sample": sample.to_dict(orient="records")
+            }
+
+        return result.to_dict(orient="records")
+
+    # ---- CASE 2: Series (e.g. value_counts, groupby results) ----
+    if hasattr(result, "to_dict"):
+
+        data = result.to_dict()
+
+        if len(data) > MAX_SAMPLE_ROWS:
+            data = dict(list(data.items())[:MAX_SAMPLE_ROWS])
+
+        return data
+
+    # ---- CASE 3: Scalar (min, max, mean, etc.) ----
+    return result
+
+import pandas as pd
+import numpy as np
+
+
+def normalize_result(result):
+
+    # scalar results (min, max, mean, etc.)
+    if isinstance(result, (int, float, str, np.integer, np.floating)):
+        return result
+
+    # pandas series
+    if isinstance(result, pd.Series):
+        return result.to_frame(name=result.name if result.name else "value")
+
+    # pandas dataframe
+    if isinstance(result, pd.DataFrame):
+
+        # convert index to column if meaningful
+        if not isinstance(result.index, pd.RangeIndex):
+            result = result.reset_index()
+        return result
+
+    # numpy array or list
+    if isinstance(result, (list, np.ndarray)):
+        return pd.DataFrame({"value": list(result)})
+
+    # dictionary
+    if isinstance(result, dict):
+        return pd.DataFrame(list(result.items()), columns=["key", "value"])
+    return result
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\utils\prompt_loader.py
+===============================
+
+# from jinja2 import Environment, FileSystemLoader
+
+
+# env = Environment(loader=FileSystemLoader("src/prompts"))
+
+
+# def get_query_prompt(columns, categorical_values, question):
+
+#     template = env.get_template("query_prompt.jinja")
+
+#     return template.render(
+#         columns=columns,
+#         categorical_values=categorical_values,
+#         question=question
+#     )
+
+
+# def get_response_prompt(question, result):
+
+#     template = env.get_template("response_prompt.jinja")
+
+#     return template.render(
+#         question=question,
+#         result=result
+#     )
+
+
+
+
+from jinja2 import Environment, FileSystemLoader
+
+env = Environment(loader=FileSystemLoader("src/prompts"))
+
+
+def get_query_prompt(columns, categorical_values, intent):
+
+    template = env.get_template("query_prompt.jinja")
+
+    return template.render(
+        columns=columns,
+        categorical_values=categorical_values,
+        intent=intent
+    )
+
+
+def get_response_prompt(question, result):
+
+    template = env.get_template("response_prompt.jinja")
+
+    return template.render(
+        question=question,
+        result=result
+    )
+
+def get_validation_prompt(intent, query, columns, categorical_values):
+   
+    template = env.get_template("validation_prompt.jinja")
+    return template.render(
+        intent=intent,
+        query=query,
+        columns=columns,
+        categorical_values=categorical_values
+    )
+
+
+===============================
+FILE: C:\Users\NeelachalMohanty\OneDrive - GyanSys Inc\Desktop\GENAI Assign\CSV_BOT\src\utils\__init__.py
+===============================
+
+
