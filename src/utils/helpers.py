@@ -36,7 +36,8 @@
 #     return result
 
 
-
+import pandas as pd
+import numpy as np
 import yaml
 
 with open("config.yaml", "r") as f:
@@ -48,7 +49,8 @@ MAX_SAMPLE_ROWS = config["limits"]["max_sample_rows"]
 def execute_query(code, df):
 
     try:
-        result = eval(code, {"df": df})
+        # result = eval(code, {"df": df})
+        result = eval(code, {"__builtins__": {}}, {"df": df})
         return result, None
 
     except Exception as e:
@@ -58,7 +60,8 @@ def execute_query(code, df):
 def summarize_result(result):
 
     # ---- CASE 1: DataFrame ----
-    if hasattr(result, "shape") and hasattr(result, "columns"):
+    # if hasattr(result, "shape") and hasattr(result, "columns"):
+    if isinstance(result, pd.DataFrame):
 
         row_count = len(result)
 
@@ -74,7 +77,8 @@ def summarize_result(result):
         return result.to_dict(orient="records")
 
     # ---- CASE 2: Series (e.g. value_counts, groupby results) ----
-    if hasattr(result, "to_dict"):
+    # if hasattr(result, "to_dict"):
+    if isinstance(result, pd.Series):
 
         data = result.to_dict()
 
@@ -86,8 +90,6 @@ def summarize_result(result):
     # ---- CASE 3: Scalar (min, max, mean, etc.) ----
     return result
 
-import pandas as pd
-import numpy as np
 
 
 def normalize_result(result):
@@ -105,7 +107,7 @@ def normalize_result(result):
 
         # convert index to column if meaningful
         if not isinstance(result.index, pd.RangeIndex):
-            result = result.reset_index()
+            result = result.reset_index(drop=True)
         return result
 
     # numpy array or list

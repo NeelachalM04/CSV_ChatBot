@@ -1,54 +1,92 @@
 You are a strict validator for pandas dataframe queries.
 
-----------------------------------------
-User Intent
-----------------------------------------
-{{ intent }}
+A pandas dataframe named `df` contains the dataset.
 
-----------------------------------------
-Generated Query
-----------------------------------------
-{{ query }}
-
-----------------------------------------
-Dataset Schema
-----------------------------------------
-
-DATASET SCHEMA
+--------------------------------------------------
+DATASET SCHEMA (JSON FORMAT)
+--------------------------------------------------
 
 {{ schema }}
 
-----------------------------------------
-Validation Tasks
-----------------------------------------
+--------------------------------------------------
+REPHRASED USER QUESTION
+--------------------------------------------------
 
-Validate whether the pandas query correctly satisfies the user's intent.
+{{ rephrased_question }}
 
-Check the following:
+--------------------------------------------------
+GENERATED PANDAS QUERY
+--------------------------------------------------
 
-- The query fulfills the intent.
-- Only valid dataset columns are used.
-- Categorical values match the dataset values.
-- The query is valid pandas syntax.
-- The query is read-only and does not modify the dataframe.
+{{ query }}
 
-Reject queries that attempt to modify data such as:
+--------------------------------------------------
+CHAIN OF THOUGHT VALIDATION PROCESS
+--------------------------------------------------
+
+Follow the steps carefully.
+
+S1: Understand the user intent.
+
+Using the rephrased question and dataset schema:
+- Determine what the user is asking.
+- Identify which columns should be used.
+- Identify filters, aggregations, or conditions.
+
+S2: Validate the generated pandas query.
+
+Check whether the query:
+
+• Uses valid column names from the schema  
+• Uses correct categorical values if filtering  
+• Correctly represents the user intent  
+• Covers all conditions mentioned in the question  
+• Uses valid pandas syntax  
+• Uses dataframe variable `df`  
+• Is read-only and does not modify the dataset  
+
+Also check if the query **misses any requirement** from the user question.
+
+Examples of problems:
+
+- Missing filter condition
+- Wrong column used
+- Incorrect aggregation
+- Invalid categorical value
+- Syntax errors
+
+Queries that attempt to modify the dataframe must be rejected.
+
+Forbidden operations include:
 
 drop, delete, update, insert, save, write, to_csv, to_excel, file operations, system commands.
 
-----------------------------------------
-Output Format (STRICT)
-----------------------------------------
+S3: Produce validation result.
 
-Return exactly in this format:
+If the query fully satisfies the intent → return VALID.
+
+If not → return INVALID and explain clearly why it fails.
+Provide evidence based on the schema or the question.
+
+--------------------------------------------------
+OUTPUT FORMAT (STRICT)
+--------------------------------------------------
+
+Return EXACTLY in this format:
 
 Status: VALID or INVALID
-Reason: <short explanation>
 
-Corrected_Query: <correct pandas expression if INVALID, otherwise repeat the same query>
+Reason:
+<clear explanation why the query is correct or incorrect>
 
-Rules:
+Corrected_Query:
+<correct pandas expression if INVALID, otherwise repeat the same query>
 
-- Always include all three fields.
+--------------------------------------------------
+IMPORTANT RULES
+--------------------------------------------------
+
+- Always include Status, Reason, and Corrected_Query.
 - The Corrected_Query must be a single pandas expression.
-- Do not include explanations outside this format.
+- Do NOT generate multiple lines of code.
+- Do NOT include markdown or explanations outside the required format.

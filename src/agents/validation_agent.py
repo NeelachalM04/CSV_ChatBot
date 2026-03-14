@@ -2,10 +2,10 @@ from src.azure_client import client, deployment_name
 from src.utils.prompt_loader import get_validation_prompt
 
 
-def validate_query(intent, query, schema):
+def validate_query(rephrased_question, query, schema):
 
     prompt = get_validation_prompt(
-        intent,
+        rephrased_question,
         query,
         schema
     )
@@ -15,7 +15,7 @@ def validate_query(intent, query, schema):
         messages=[
             {
                 "role": "system",
-                "content": "You validate pandas dataframe queries strictly."
+                "content": "You are a strict validator for pandas dataframe queries."
             },
             {
                 "role": "user",

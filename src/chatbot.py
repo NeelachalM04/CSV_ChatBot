@@ -151,6 +151,8 @@ from src.agents.validation_agent import validate_query
 from src.utils.helpers import execute_query, summarize_result, normalize_result
 from src.agents.response_agent import generate_response
 from src.utils.dataframe_analyzer import analyze_dataframe
+from src.utils.log_func import log_query
+from src.utils.history_func import save_history, get_recent_history
 
 
 class CSVChatbot:
@@ -159,6 +161,8 @@ class CSVChatbot:
         self.df = load_csv()
 
     def ask(self, question):
+
+        history = get_recent_history(3)
 
         schema = analyze_dataframe(self.df)
 
@@ -173,30 +177,34 @@ class CSVChatbot:
         }
 
         # Step 1 → generate query
-        intent, query_initial = extract_intent_and_query(question, schema)
+        rephrased_question, query_initial, reasoning = extract_intent_and_query( question, schema, history)
 
-        print("\nExtracted Intent:")
-        print(intent)
+        print("\nRephrased Question:")
+        print(rephrased_question)
+
+        print("\nReasoning:")
+        print(reasoning)
 
         retries = 0
         max_retries = 3
 
-        query = query_initial.replace("```python", "").replace("```", "").strip()
+        query = ( query_initial.replace("```python", "").replace("```", "").replace("`", "").strip()
+                )
 
         while retries < max_retries:
 
             # guard against table outputs
             if "|" in query or "\n|" in query:
-                _, query = extract_intent_and_query(question, schema)
-                query = query.replace("```python", "").replace("```", "").strip()
+                _, query, _ = extract_intent_and_query(question, schema, history)
+                query = query.replace("```python", "").replace("```", "").replace("`", "").strip()
                 retries += 1
                 continue
 
             # Step 2 → validate query
-            validation = validate_query(intent, query, schema)
+            validation = validate_query(rephrased_question, query, schema)
 
             if "Status: VALID" in validation:
-
+            
                 unsafe_keywords = [
                     "drop(", "to_csv", "to_excel", "update(",
                     "delete", "insert", "write", "save",
@@ -219,6 +227,7 @@ class CSVChatbot:
 
             if "Corrected_Query:" in validation:
                 query = validation.split("Corrected_Query:")[-1].strip()
+                query = query.replace("```python", "").replace("```", "").replace("`", "").strip()
 
             retries += 1
 
@@ -228,9 +237,9 @@ class CSVChatbot:
             available_cols = ", ".join(columns)
 
             answer = (
-                "Your request refers to a column that does not exist in the dataset. "
+                "The system was unable to generate a valid query for your request. "
                 f"Available columns are: {available_cols}. "
-                "Please ask using one of these fields."
+                "Please try rephrasing your question."
             )
 
             return answer, None
@@ -240,6 +249,11 @@ class CSVChatbot:
 
         # Step 3 → execute query
         result, error = execute_query(query, self.df)
+
+        if error:
+            log_query(rephrased_question, query, error, "FAILED")
+        else:
+            log_query(rephrased_question, query, result, "SUCCESS")
 
         if result is not None:
             result = normalize_result(result)
@@ -308,7 +322,9 @@ class CSVChatbot:
             }
 
         # Step 7 → generate response
-        answer = generate_response(question, response_payload)
+        answer = generate_response(rephrased_question, response_payload)
+
+        save_history(rephrased_question, answer)       
 
         if isinstance(summarized, dict) and "sample" in summarized:
             return answer, pd.DataFrame(summarized["sample"])
