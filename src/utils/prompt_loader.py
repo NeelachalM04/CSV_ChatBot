@@ -26,20 +26,21 @@
 
 
 
-
+import json
 from jinja2 import Environment, FileSystemLoader
 
 env = Environment(loader=FileSystemLoader("src/prompts"))
 
-
-def get_query_prompt(columns, categorical_values, intent):
+def get_query_prompt(schema, question):
 
     template = env.get_template("query_prompt.jinja")
 
+    # convert schema to formatted JSON for better LLM understanding
+    schema_text = json.dumps(schema, indent=2)
+
     return template.render(
-        columns=columns,
-        categorical_values=categorical_values,
-        intent=intent
+        schema=schema_text,
+        question=question
     )
 
 
@@ -52,13 +53,15 @@ def get_response_prompt(question, result):
         result=result
     )
 
-def get_validation_prompt(intent, query, columns, categorical_values):
-   
+def get_validation_prompt(intent, query, schema):
+
     template = env.get_template("validation_prompt.jinja")
+
+    schema_text = json.dumps(schema, indent=2)
+
     return template.render(
         intent=intent,
         query=query,
-        columns=columns,
-        categorical_values=categorical_values
+        schema=schema_text
     )
 

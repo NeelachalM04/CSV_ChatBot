@@ -2,17 +2,16 @@ from src.azure_client import client, deployment_name
 from src.utils.prompt_loader import get_query_prompt
 
 
-def extract_intent_and_query(question, columns, categorical_values):
+def extract_intent_and_query(question, schema):
     """
     Single step:
     LLM infers intent internally and generates query
     """
 
     query_prompt = get_query_prompt(
-        columns,
-        categorical_values,
-        question
-    )
+    schema,
+    question
+)
 
     query_response = client.chat.completions.create(
         model=deployment_name,
