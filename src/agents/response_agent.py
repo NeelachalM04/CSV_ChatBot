@@ -1,23 +1,16 @@
+from src.azure_client import llm
 from src.utils.prompt_loader import get_response_prompt
-from src.azure_client import client, deployment_name
 
 
 def generate_response(rephrased_question, result_payload):
 
-    prompt = get_response_prompt(rephrased_question, result_payload)
+    prompt = get_response_prompt()
 
-    response = client.chat.completions.create(
-        model=deployment_name,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant that explains dataframe query results to users."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    )
+    chain = prompt | llm
 
-    return response.choices[0].message.content.strip()
+    response = chain.invoke({
+        "question": rephrased_question,
+        "result": result_payload
+    }).content
+
+    return response.strip()

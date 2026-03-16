@@ -25,4 +25,4 @@ dataframe_analysis:
   max_categorical_values: 20
 
 dataset:
-  data_path: data/StudentsPerformance.csv
+  data_path: data/supermarket_sales.csv

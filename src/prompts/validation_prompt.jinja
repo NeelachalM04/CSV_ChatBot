@@ -37,13 +37,15 @@ S2: Validate the generated pandas query.
 
 Check whether the query:
 
-• Uses valid column names from the schema  
-• Uses correct categorical values if filtering  
-• Correctly represents the user intent  
-• Covers all conditions mentioned in the question  
-• Uses valid pandas syntax  
-• Uses dataframe variable `df`  
-• Is read-only and does not modify the dataset  
+- Uses valid column names from the schema  
+- Uses correct categorical values if filtering  
+- Correctly represents the user intent  
+- Covers all conditions mentioned in the question  
+- Uses valid pandas syntax  
+- Uses dataframe variable `df`  
+- Is read-only and does not modify the dataset  
+- If the query introduces new filtering, ranking, sorting, or aggregation that was NOT requested in the question, mark it INVALID.
+
 
 Also check if the query **misses any requirement** from the user question.
 

@@ -38,6 +38,7 @@ S2:
         - Determine whether the current question refers to a subset,
           filtered group, or result derived in previous turns.
 
+
         - If the current question implicitly refers to previously
           filtered data or results, interpret the reference using the
           conditions or constraints established earlier in the conversation.
@@ -48,6 +49,8 @@ S2:
 
         - Rewrite the question into a clear standalone version that
           explicitly includes the necessary context from earlier turns.
+        
+        
 
         Output:
             Original Question
@@ -86,6 +89,7 @@ S5: Validate the generated code internally.
     If the code is invalid:
         Step 1 → repeat S3 and regenerate the query
         Step 2 → if still unclear, revisit S2
+
 
 S6: Produce the final structured output.
 
