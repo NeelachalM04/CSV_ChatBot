@@ -21,6 +21,12 @@ GENERATED PANDAS QUERY
 {{ query }}
 
 --------------------------------------------------
+EXECUTION ERROR (IF ANY)
+--------------------------------------------------
+
+{{ execution_error }}
+
+--------------------------------------------------
 CHAIN OF THOUGHT VALIDATION PROCESS
 --------------------------------------------------
 
@@ -40,11 +46,19 @@ Check whether the query:
 - Uses valid column names from the schema  
 - Uses correct categorical values if filtering  
 - Correctly represents the user intent  
+- If an execution error is provided, analyze the error message and determine the cause of the failure (e.g., wrong column name, invalid pandas operation, missing attribute, incorrect indexing).
+- Use the error message together with the schema to generate a corrected pandas query.
 - Covers all conditions mentioned in the question  
 - Uses valid pandas syntax  
 - Uses dataframe variable `df`  
 - Is read-only and does not modify the dataset  
 - If the query introduces new filtering, ranking, sorting, or aggregation that was NOT requested in the question, mark it INVALID.
+
+If the query failed during execution:
+
+- Carefully read the execution error.
+- Identify which part of the query caused the error.
+- Fix the query so it executes correctly while preserving the user intent.
 
 
 Also check if the query **misses any requirement** from the user question.

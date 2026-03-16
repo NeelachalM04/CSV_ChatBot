@@ -35,25 +35,3 @@ while True:
             print(result.to_string())
         else:
             print(result)
-#     # Display rows neatly
-#     if isinstance(result, pd.DataFrame):
-#         print("\nShowing few rows:")
-#         print(
-#             tabulate(
-#                 result.head(5),
-#                 headers="keys",
-#                 tablefmt="psql",
-#                 showindex=False
-#             )
-#         )
-
-#     elif isinstance(result, pd.Series):
-#         print("\nShowing few rows:")
-#         print(
-#             tabulate(
-#         result.head(5),
-#         headers="keys",
-#         tablefmt="simple",
-#         showindex=False
-#         )
-# )

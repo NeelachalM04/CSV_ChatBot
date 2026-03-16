@@ -1,40 +1,3 @@
-# from src.utils.config_loader import load_config
-
-# config = load_config()
-# MAX_SAMPLE_ROWS = config["limits"]["max_sample_rows"]
-
-
-# def execute_query(code, df):
-
-#     try:
-#         result = eval(code, {"df": df})
-#         return result, None
-
-#     except Exception as e:
-#         return None, str(e)
-
-
-# def summarize_result(result):
-
-#     # If result is a dataframe
-#     if hasattr(result, "shape"):
-
-#         row_count = len(result)
-
-#         if row_count > MAX_SAMPLE_ROWS:
-
-#             sample = result.head(MAX_SAMPLE_ROWS)
-
-#             return {
-#                 "rows": row_count,
-#                 "sample": sample.to_dict(orient="records")      # convert sample() to list of dicts for better readability
-#             }
-
-#         # small dataframe → return full data
-#         return result.to_dict(orient="records")
-
-#     return result
-
 
 import pandas as pd
 import numpy as np
@@ -49,8 +12,8 @@ MAX_SAMPLE_ROWS = config["limits"]["max_sample_rows"]
 def execute_query(code, df):
 
     try:
-        # result = eval(code, {"df": df})
-        result = eval(code, {"__builtins__": {}}, {"df": df})
+        # result = eval(code, {"__builtins__": {}}, {"df": df})
+        result = eval(code, {"__builtins__": {}}, {"df": df, "pd": pd})
         return result, None
 
     except Exception as e:

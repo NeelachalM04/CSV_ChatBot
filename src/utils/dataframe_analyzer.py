@@ -112,6 +112,18 @@ def analyze_dataframe(df):
             col_type = "bool"
         elif pd.api.types.is_datetime64_any_dtype(dtype):
             col_type = "datetime"
+        # elif dtype == "object":
+    
+        #     sample_values = series.dropna().astype(str).head(5)
+
+        #     if all(pd.to_datetime(sample_values, format="%m/%d/%Y", errors="coerce").notna()):
+        #         col_type = "date"
+
+        #     elif all(pd.to_datetime(sample_values, format="%H:%M", errors="coerce").notna()):
+        #         col_type = "time"
+
+        #     else:
+        #         col_type = "string"
         else:
             col_type = "string"
 
