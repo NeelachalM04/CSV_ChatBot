@@ -10,7 +10,7 @@ SAVE_LOGS = os.getenv("SAVE_LOGS", "False").lower() == "true"
 LOG_DIR = "logs"
 
 
-def log_query(question, query, result, status):
+def log_query(question, query, result, status, graph_path=None):  # ⭐ ADDED: graph_path parameter
     """
     Save chatbot interactions into a daily Excel log file
     """
@@ -18,11 +18,13 @@ def log_query(question, query, result, status):
     if not SAVE_LOGS:
         return
 
-    os.makedirs(LOG_DIR, exist_ok=True)
-
-    # create daily log file
+    # ⭐ CHANGED: Create daily folder structure
     date_str = datetime.now().strftime("%Y-%m-%d")
-    log_file = os.path.join(LOG_DIR, f"chatbot_{date_str}.xlsx")
+    daily_logs_dir = os.path.join(LOG_DIR, date_str)
+    os.makedirs(daily_logs_dir, exist_ok=True)
+
+    # ⭐ CHANGED: Save log file inside daily folder
+    log_file = os.path.join(daily_logs_dir, f"chatbot_{date_str}.xlsx")
 
     # safely convert result
     try:
@@ -35,7 +37,8 @@ def log_query(question, query, result, status):
         "question": question,
         "generated_query": query,
         "result": result_text[:500],
-        "status": status
+        "status": status,
+        "graph_path": graph_path if graph_path else ""  # ⭐ ADDED: graph path column
     }
 
     try:

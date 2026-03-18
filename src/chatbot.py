@@ -13,6 +13,7 @@ from src.utils.log_func import log_query
 from src.utils.history_func import save_history, get_recent_history
 
 
+
 class CSVChatbot:
 
     def __init__(self):
@@ -143,10 +144,19 @@ class CSVChatbot:
 
                 query = corrected_query
 
-        if error:
-            log_query(rephrased_question, query, error, "FAILED")
-        else:
-            log_query(rephrased_question, query, result, "SUCCESS")
+
+        if result is not None and not error:
+            if isinstance(result, pd.DataFrame) and result.index.name:
+                result = result.reset_index()
+            elif isinstance(result, pd.Series) and result.index.name:
+                result = result.reset_index()
+                result.columns = [result.columns[0], result.columns[1] if len(result.columns) > 1 else 'value']
+                
+
+        # if error:
+        #     log_query(rephrased_question, query, error, "FAILED")
+        # else:
+        #     log_query(rephrased_question, query, result, "SUCCESS")
 
         if result is not None:
             result = normalize_result(result)
@@ -217,9 +227,27 @@ class CSVChatbot:
         # Step 7 → generate response
         answer = generate_response(rephrased_question, response_payload)
 
-        save_history(rephrased_question, answer)       
+        save_history(rephrased_question, answer)     
 
+       # Step 8 → generate graph if needed
         if isinstance(summarized, dict) and "sample" in summarized:
-            return answer, pd.DataFrame(summarized["sample"])
+            graph_result = pd.DataFrame(summarized["sample"])
+        elif isinstance(result, (pd.DataFrame, pd.Series)):
+            graph_result = result
+        else:
+            graph_result = None
 
-        return answer, result
+        # ⭐ CHANGED: Return everything needed for logging
+        return_data = {
+            'answer': answer,
+            'result': result if not isinstance(summarized, dict) or "sample" not in summarized else pd.DataFrame(summarized["sample"]),
+            'rephrased_question': rephrased_question,
+            'graph_result': graph_result,
+            'query': query,
+            'error': error
+        }
+
+        return return_data  # ⭐ CHANGED: return dictionary with all data
+
+
+         

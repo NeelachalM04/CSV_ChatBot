@@ -8,3 +8,4 @@ pyyaml
 langchain
 langchain-openai
 langchain-core
+matplotlib

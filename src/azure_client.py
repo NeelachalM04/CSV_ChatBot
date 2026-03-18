@@ -14,5 +14,5 @@ llm = AzureChatOpenAI(
     azure_endpoint=config["azure"]["endpoint"],
     api_version=config["azure"]["api_version"],
     deployment_name=config["azure"]["deployment"],
-    temperature=0
+    temperature=0   # 0 = deterministic, no random creative answers
 )

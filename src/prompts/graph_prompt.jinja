@@ -1,0 +1,73 @@
+You are a data visualization expert.
+
+You are given a user question and the result of a pandas query on a tabular dataset.
+
+--------------------------------------------------
+USER QUESTION
+--------------------------------------------------
+
+{{ question }}
+
+--------------------------------------------------
+QUERY RESULT
+--------------------------------------------------
+
+{{ result }}
+
+--------------------------------------------------
+CHAIN OF THOUGHT
+--------------------------------------------------
+
+Follow these steps carefully before deciding:
+
+S1: Understand what the result contains.
+    - Is it a single number (scalar)?
+    - Is it a list of values with categories (Series/grouped)?
+    - Is it a table with multiple rows and columns (DataFrame)?
+    - Is it a time-based result?
+
+S2: Understand what the user is asking for.
+    - Are they comparing things?
+    - Are they asking about trends over time?
+    - Are they asking about distribution of values?
+    - Are they asking about proportions or percentages?
+    - Are they asking about relationships between two numeric things?
+    - Are they just asking for a raw list or single value?
+
+S3: Based on S1 and S2, decide:
+    - If the result is a single scalar value → no graph needed
+    - If the result is a raw list of rows with no clear comparison → no graph needed
+    - If the result shows comparison across categories → graph needed
+    - If the result shows values over time → graph needed
+    - If the result shows distribution of a numeric column → graph needed
+    - If the result shows proportions → graph needed
+    - If the result shows relationship between two numeric columns → graph needed
+
+S4: If graph is needed, decide which type best represents the result.
+    - Think about the nature of the data and the user's intent
+    - Choose the most appropriate graph type naturally
+
+S5: Identify which columns from the result should be used for x and y axes.
+    - Use the actual column names present in the result
+    - If result is a Series, the index is x and values are y
+
+--------------------------------------------------
+OUTPUT FORMAT (STRICT)
+--------------------------------------------------
+
+Return EXACTLY in this format:
+
+Graph_Needed: Yes or No
+Graph_Type: bar or line or pie or histogram or scatter or none
+X_Column: <exact column name from result to use as x axis, or index, or none>
+Y_Column: <exact column name from result to use as y axis, or value, or none>
+Title: <short meaningful graph title based on the question>
+Reason: <one line explanation of why this graph type was chosen>
+
+Rules:
+- Always include all 6 fields
+- Graph_Type must be exactly one of: bar, line, pie, histogram, scatter, none
+- If Graph_Needed is No, set Graph_Type, X_Column, Y_Column, Title to none
+- X_Column and Y_Column must be actual column names in the result or none
+- Do NOT hardcode dataset-specific assumptions
+- Base the decision entirely on the structure of the result and the user question

@@ -11,13 +11,15 @@ def load_csv():
     df = pd.read_csv(DATA_PATH)
 
     # Normalize column names
-    df.columns = (
-        df.columns
-        .str.strip()
-        .str.lower()
-        .str.replace(r"[^\w\s]", "", regex=True)   # remove special chars
-        .str.replace(" ", "_")                     # spaces → underscore
-    )
+    # df.columns = (
+    #     df.columns
+    #     .str.strip()
+    #     .str.lower()
+    #     .str.replace(r"[^\w\s]", "", regex=True)   # remove special chars
+    #     .str.replace(" ", "_")                     # spaces → underscore
+    # )
+
+    df.columns = df.columns.str.strip()
 
     # Optional short aliases for cleaner queries
     df.rename(columns={

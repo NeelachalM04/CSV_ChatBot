@@ -37,7 +37,7 @@ def summarize_result(result):
                 "sample": sample.to_dict(orient="records")
             }
 
-        return result.to_dict(orient="records")
+        return result.to_dict(orient="records")     #convert DataFrame to list of dicts for better readability in LLM output
 
     # ---- CASE 2: Series (e.g. value_counts, groupby results) ----
     # if hasattr(result, "to_dict"):

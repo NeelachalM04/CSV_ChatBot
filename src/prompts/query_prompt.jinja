@@ -98,14 +98,20 @@ IMPORTANT CONSTRAINTS
 --------------------------------------------------
 
 - Use ONLY column names present in the schema.
+- Column names may contain spaces or special characters.
+  Always use exact column names from the schema wrapped in quotes.
+  Example: df["Product line"] not df["product_line"] or df[product_line]
+- Use double quotes for column names with spaces: df["column name"]
 - If filtering categorical columns, use ONLY the provided values.
 - The dataframe variable name is always `df`.
 - The query must be read-only.
 - Do NOT generate operations that modify data.
+- Do NOT use .plot(), .show(), or any visualization methods
+- Return the data as a DataFrame or Series, NOT a plot object
 
 Forbidden operations include:
 
-drop, delete, update, insert, save, write, to_csv, to_excel, file operations, system commands.
+drop, delete, update, insert, save, write, to_csv, to_excel, file operations, system commands, .plot(), .show()
 
 --------------------------------------------------
 OUTPUT FORMAT (STRICT)

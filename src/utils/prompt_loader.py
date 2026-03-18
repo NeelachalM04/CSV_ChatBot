@@ -36,3 +36,14 @@ def get_validation_prompt():
         template_format="jinja2",
         input_variables=["rephrased_question", "query", "schema", "execution_error"]
     )
+
+def get_graph_prompt():
+
+    with open("src/prompts/graph_prompt.jinja", "r") as f:
+        template = f.read()
+
+    return PromptTemplate(
+        template=template,
+        template_format="jinja2",
+        input_variables=["question", "result"]
+    )
